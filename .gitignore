@@ -1,0 +1,18 @@
+# Local secrets
+.env
+.streamlit/secrets.toml
+
+# Codex/local workspace metadata
+.agents/
+.codex/
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Local runtime artifacts
+logs/
+tmp/
+outputs/
+.DS_Store

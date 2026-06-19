@@ -1,0 +1,31 @@
+lookback_report_days: 14
+market_data_days: 180
+risk_event_days: 90
+min_target_upside: 0.25
+max_target_upside: 3.00
+min_avg_amount_20d: 150000000
+min_broker_count: 1
+min_star_analyst_count: 1
+max_post_report_return: 0.12
+min_post_report_return: -0.08
+max_return_20d: 0.35
+max_return_60d: 0.80
+min_listing_days: 365
+portfolio_size: 8
+max_per_industry: 2
+min_industry_count: 4
+allow_research_portfolio_fallback: true
+max_market_update_stocks: 80
+max_report_rows: 500
+market_risk:
+  index_code: "000300"
+  ma60_position: 0.50
+  ma120_position: 0.30
+  normal_position: 1.00
+weights:
+  target_upside: 0.25
+  star_consensus: 0.20
+  target_revision: 0.20
+  earnings_revision: 0.15
+  price_reaction: 0.10
+  trend: 0.10

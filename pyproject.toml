@@ -1,0 +1,9 @@
+[project]
+name = "analyst-consensus-strategy"
+version = "0.1.0"
+description = "Low-cost personal MVP for A-share star analyst consensus strategy."
+requires-python = ">=3.10"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

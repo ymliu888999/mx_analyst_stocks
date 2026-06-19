@@ -1,0 +1,12 @@
+pandas
+numpy
+akshare
+tushare
+requests
+beautifulsoup4
+lxml
+python-dotenv
+pyyaml
+openpyxl
+streamlit
+pytest
