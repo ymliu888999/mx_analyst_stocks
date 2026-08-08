@@ -8,6 +8,7 @@ import pandas as pd
 from src import db
 from src.data_providers.akshare_provider import fetch_latest_quotes
 from src.settings import ROOT, load_yaml
+from src.pipeline.update_reports import refresh_reports
 from src.strategy.factors import (
     compute_post_report_return,
     compute_target_revision,
@@ -322,6 +323,13 @@ def run_weekly(
     run_date = datetime.now().strftime("%Y%m%d")
     config = config or load_yaml(ROOT / "config" / "strategy.yaml")
     db.init_db(db_path)
+    if config.get("refresh_reports_on_run", True):
+        refresh_reports(
+            db_path,
+            load_yaml(ROOT / "config" / "rating_map.yaml"),
+            int(config.get("report_fetch_days", 90)),
+            int(config.get("retain_report_months", 2)),
+        )
     with db.connect(db_path) as conn:
         if config.get("refresh_latest_quotes", True):
             _refresh_latest_quotes(conn, run_date)

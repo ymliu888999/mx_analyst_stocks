@@ -47,6 +47,7 @@ def test_weekly_run_writes_top20_and_research_fallback_portfolio(tmp_path):
             "portfolio_size": 8,
             "max_per_industry": 8,
             "allow_research_portfolio_fallback": True,
+            "refresh_reports_on_run": False,
             "refresh_latest_quotes": False,
             "min_target_upside": 0.25,
             "max_target_upside": 1.0,
@@ -91,7 +92,11 @@ def test_dashboard_loads_latest_weekly_tables(tmp_path):
     run_weekly(
         db_path,
         output_dir=tmp_path / "outputs",
-        config={"allow_research_portfolio_fallback": True, "refresh_latest_quotes": False},
+        config={
+            "allow_research_portfolio_fallback": True,
+            "refresh_reports_on_run": False,
+            "refresh_latest_quotes": False,
+        },
     )
 
     from src.dashboard.app import load_latest_weekly_tables

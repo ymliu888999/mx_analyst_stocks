@@ -25,7 +25,7 @@ def build_parser() -> argparse.ArgumentParser:
     market = sub.add_parser("update-market")
     market.add_argument("--days", type=int, default=180)
     reports = sub.add_parser("update-reports")
-    reports.add_argument("--days", type=int, default=30)
+    reports.add_argument("--days", type=int, default=90)
     sub.add_parser("weekly-run")
     return parser
 

@@ -16,7 +16,9 @@ max_per_industry: 2
 min_industry_count: 4
 allow_research_portfolio_fallback: true
 max_market_update_stocks: 80
-max_report_rows: 500
+refresh_reports_on_run: true
+report_fetch_days: 90
+retain_report_months: 2
 market_risk:
   index_code: "000300"
   ma60_position: 0.50
