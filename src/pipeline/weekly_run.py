@@ -268,6 +268,38 @@ def _portfolio_rows(run_date: str, candidates: list[dict], config: dict) -> list
     return rows
 
 
+def _latest_research_date(conn) -> str | None:
+    row = conn.execute(
+        "select max(publish_date) from research_rating where publish_date is not null and publish_date <> ''"
+    ).fetchone()
+    return row[0] if row else None
+
+
+def _source_failure_summary(conn, run_date: str) -> dict[str, object]:
+    rows = conn.execute(
+        """select item, severity, message
+        from data_quality_report
+        where run_date=? and lower(severity) in ('warning', 'error')
+        order by item, severity, message""",
+        (run_date,),
+    ).fetchall()
+    source_items = {"research_reports", "latest_quotes"}
+    source_failures = [
+        {
+            "item": row["item"],
+            "severity": row["severity"],
+            "message": row["message"],
+        }
+        for row in rows
+        if row["item"] in source_items or "failed" in str(row["message"] or "").lower()
+    ]
+    return {
+        "has_data_source_failure": bool(source_failures),
+        "source_failure_count": len(source_failures),
+        "source_failure_notes": [row["message"] for row in source_failures],
+    }
+
+
 def _write_reports(
     output_dir: Path,
     run_date: str,
@@ -323,8 +355,9 @@ def run_weekly(
     run_date = datetime.now().strftime("%Y%m%d")
     config = config or load_yaml(ROOT / "config" / "strategy.yaml")
     db.init_db(db_path)
+    report_refresh: dict[str, object] = {"reports": 0, "ratings": 0, "notes": []}
     if config.get("refresh_reports_on_run", True):
-        refresh_reports(
+        report_refresh = refresh_reports(
             db_path,
             load_yaml(ROOT / "config" / "rating_map.yaml"),
             int(config.get("report_fetch_days", 90)),
@@ -350,6 +383,8 @@ def run_weekly(
                 "warning",
                 "No candidates generated; missing ratings, prices, or target prices",
             )
+        latest_report_date = _latest_research_date(conn)
+        source_status = _source_failure_summary(conn, run_date)
         quality = [
             dict(r)
             for r in conn.execute(
@@ -362,5 +397,11 @@ def run_weekly(
         "run_date": run_date,
         "candidate_count": len(candidates),
         "portfolio_count": len(portfolios),
+        "report_refresh_success": bool(report_refresh.get("reports") or report_refresh.get("ratings"))
+        and not any("failed" in str(note).lower() for note in report_refresh.get("notes", [])),
+        "report_refresh_notes": report_refresh.get("notes", []),
+        "latest_research_date": latest_report_date,
+        "analysis_cutoff_date": latest_report_date or run_date,
+        **source_status,
         **paths,
     }

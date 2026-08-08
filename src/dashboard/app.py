@@ -382,6 +382,125 @@ def _render_table(frame: pd.DataFrame, *, link_stock_code: bool = True) -> None:
     st.dataframe(display, use_container_width=True, hide_index=True, column_config=column_config)
 
 
+def _pretty_yyyymmdd(value: Any | None) -> str:
+    if value in (None, "", "-"):
+        return "-"
+    text = str(value)
+    if len(text) == 8 and text.isdigit():
+        return f"{text[:4]}-{text[4:6]}-{text[6:]}"
+    return text
+
+
+def _latest_research_date(db_path: Path) -> str | None:
+    with _connect(db_path) as conn:
+        row = conn.execute(
+            "select max(publish_date) from research_rating where publish_date is not null and publish_date <> ''"
+        ).fetchone()
+        return row[0] if row else None
+
+
+def _infer_data_source_failure(db_path: Path) -> tuple[bool, list[str]]:
+    with _connect(db_path) as conn:
+        run_date = latest_run_date(conn)
+        if not run_date:
+            return False, []
+        rows = conn.execute(
+            """select item, severity, message
+            from data_quality_report
+            where run_date=? and lower(severity) in ('warning', 'error')
+            order by item, severity, message""",
+            (run_date,),
+        ).fetchall()
+    failure_items = {"research_reports", "latest_quotes"}
+    notes = [
+        str(row["message"] or "")
+        for row in rows
+        if row["item"] in failure_items or "failed" in str(row["message"] or "").lower()
+    ]
+    return bool(notes), notes
+
+
+def _build_refresh_status(db_path: Path, refresh_result: dict[str, Any] | None) -> dict[str, Any]:
+    latest_report_date = None
+    analysis_cutoff_date = None
+    report_refresh_success = None
+    has_data_source_failure = None
+    failure_notes: list[str] = []
+
+    if refresh_result:
+        latest_report_date = refresh_result.get("latest_research_date")
+        analysis_cutoff_date = refresh_result.get("analysis_cutoff_date")
+        report_refresh_success = refresh_result.get("report_refresh_success")
+        has_data_source_failure = refresh_result.get("has_data_source_failure")
+        failure_notes = list(refresh_result.get("source_failure_notes") or [])
+
+    if latest_report_date is None:
+        latest_report_date = _latest_research_date(db_path)
+    if analysis_cutoff_date is None:
+        analysis_cutoff_date = latest_report_date
+    if has_data_source_failure is None:
+        has_data_source_failure, failure_notes = _infer_data_source_failure(db_path)
+
+    return {
+        "report_refresh_success": bool(report_refresh_success),
+        "latest_report_date": latest_report_date,
+        "analysis_cutoff_date": analysis_cutoff_date,
+        "has_data_source_failure": bool(has_data_source_failure),
+        "failure_notes": failure_notes,
+    }
+
+
+def _render_refresh_status(db_path: Path, refresh_result: dict[str, Any] | None) -> None:
+    import streamlit as st
+
+    status = _build_refresh_status(db_path, refresh_result)
+    if refresh_result is None or status["report_refresh_success"] is None:
+        refresh_label = "等待人工刷新"
+        refresh_class = "info"
+    elif status["report_refresh_success"]:
+        refresh_label = "已成功刷新"
+        refresh_class = "ok"
+    else:
+        refresh_label = "刷新失败 / 部分失败"
+        refresh_class = "warn"
+    failure_label = "有" if status["has_data_source_failure"] else "无"
+    failure_class = "warn" if status["has_data_source_failure"] else "ok"
+    latest_report_date = _pretty_yyyymmdd(status["latest_report_date"])
+    analysis_cutoff_date = _pretty_yyyymmdd(status["analysis_cutoff_date"])
+    failure_note = ""
+    if status["has_data_source_failure"] and status["failure_notes"]:
+        failure_note = status["failure_notes"][0]
+        if len(failure_note) > 48:
+            failure_note = f"{failure_note[:48]}..."
+
+    st.markdown(
+        f"""
+        <div class="refresh-status-banner">
+            <div class="refresh-status-grid">
+                <div class="refresh-status-card">
+                    <div class="refresh-status-label">本次是否成功刷新研报</div>
+                    <div class="refresh-status-value {refresh_class}">{refresh_label}</div>
+                </div>
+                <div class="refresh-status-card">
+                    <div class="refresh-status-label">最新研报日期</div>
+                    <div class="refresh-status-value info">{latest_report_date}</div>
+                </div>
+                <div class="refresh-status-card">
+                    <div class="refresh-status-label">分析使用的数据截止日期</div>
+                    <div class="refresh-status-value info">{analysis_cutoff_date}</div>
+                </div>
+                <div class="refresh-status-card">
+                    <div class="refresh-status-label">是否有数据源失败</div>
+                    <div class="refresh-status-value {failure_class}">{failure_label}</div>
+                    <div class="refresh-status-note">{failure_note}</div>
+                </div>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
 def _inject_style() -> None:
     import streamlit as st
 
@@ -478,6 +597,58 @@ def _inject_style() -> None:
             font-size: 0.95rem;
             white-space: nowrap;
         }
+        .refresh-status-banner {
+            margin: 0.35rem 0 0.9rem 0;
+            padding: 0.75rem;
+            border-radius: 12px;
+            border: 1px solid rgba(139, 92, 246, 0.22);
+            background: linear-gradient(135deg, rgba(255, 255, 255, 0.96), rgba(245, 243, 255, 0.92));
+            box-shadow: 0 6px 18px rgba(15, 23, 42, 0.06);
+        }
+        .refresh-status-grid {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 0.75rem;
+        }
+        .refresh-status-card {
+            border-radius: 10px;
+            padding: 0.75rem 0.8rem;
+            border: 1px solid rgba(148, 163, 184, 0.18);
+            background: rgba(255, 255, 255, 0.94);
+            min-height: 84px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            text-align: center;
+        }
+        .refresh-status-label {
+            font-size: 0.88rem;
+            font-weight: 800;
+            color: #1f2937;
+            line-height: 1.25;
+        }
+        .refresh-status-value {
+            margin-top: 0.35rem;
+            font-size: 1rem;
+            font-weight: 800;
+            line-height: 1.2;
+        }
+        .refresh-status-value.ok {
+            color: #047857;
+        }
+        .refresh-status-value.warn {
+            color: #b91c1c;
+        }
+        .refresh-status-value.info {
+            color: #7c3aed;
+        }
+        .refresh-status-note {
+            margin-top: 0.25rem;
+            font-size: 0.72rem;
+            line-height: 1.15;
+            color: #6b7280;
+            word-break: break-word;
+        }
         @media (max-width: 720px) {
             .block-container {
                 padding-left: 0.75rem !important;
@@ -490,6 +661,9 @@ def _inject_style() -> None:
             .signature {
                 width: 100%;
                 margin-left: 48px;
+            }
+            .refresh-status-grid {
+                grid-template-columns: 1fr;
             }
             div[data-testid="stElementContainer"]:has(button[data-testid="stBaseButton-primary"]),
             div[data-testid="stButton"]:has(button[data-testid="stBaseButton-primary"]) {
@@ -521,6 +695,7 @@ def _render_header(db_path: Path, output_dir: Path) -> None:
         if st.button("人工刷新", use_container_width=False, type="primary"):
             with st.spinner("正在重新计算周报..."):
                 result = run_weekly(db_path, output_dir=output_dir)
+            st.session_state["last_refresh_result"] = result
             st.success(f"刷新完成：候选 {result['candidate_count']}，组合 {result['portfolio_count']}")
             st.rerun()
 
@@ -636,6 +811,8 @@ def main() -> None:
     tables = load_latest_weekly_tables(db_path)
     run_date = tables["run_date"]
     metrics = get_dashboard_metrics(db_path)
+    refresh_result = st.session_state.get("last_refresh_result")
+    _render_refresh_status(db_path, refresh_result)
     candidates = tables["candidates"]
     portfolio = load_selected_portfolio(db_path)
     quality = tables["quality"]
