@@ -1,0 +1,54 @@
+name: weekly-run
+
+on:
+  schedule:
+    # 每周一早上跑一次，按 UTC 计算；北京时间为 08:30
+    - cron: "30 0 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: weekly-run-main
+  cancel-in-progress: false
+
+jobs:
+  weekly-run:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: python -m pip install --upgrade pip && pip install -r requirements.txt
+
+      - name: Run weekly refresh
+        env:
+          USE_AKSHARE: "true"
+          USE_TUSHARE: ${{ secrets.USE_TUSHARE }}
+          TUSHARE_TOKEN: ${{ secrets.TUSHARE_TOKEN }}
+          DB_URL: sqlite:///data/strategy.db
+          TIMEZONE: Asia/Shanghai
+        run: python -m src.cli weekly-run
+
+      - name: Commit updated database
+        run: |
+          if [[ -n "$(git status --porcelain data/strategy.db)" ]]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add data/strategy.db
+            git commit -m "chore: refresh weekly strategy data"
+            git push
+          else
+            echo "No database changes to commit."
+          fi
