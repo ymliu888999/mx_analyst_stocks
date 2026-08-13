@@ -139,3 +139,14 @@ def test_dashboard_metrics_include_latest_run_time_and_distinct_analysts(tmp_pat
     assert metrics["latest_run_time"] == "2026-06-19 15:30:00"
     assert metrics["distinct_analyst_count"] == 1
     assert analyst_id
+
+
+def test_dashboard_source_keeps_chinese_labels_intact():
+    source = (Path(__file__).parents[1] / "src" / "dashboard" / "app.py").read_text(encoding="utf-8")
+
+    assert "明星分析师共识策略" in source
+    assert "人工刷新" in source
+    assert "历史记录" in source
+    assert "最新运行时间" in source
+    assert "最终组合" in source
+    assert "????" not in source
