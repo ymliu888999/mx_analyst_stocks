@@ -236,7 +236,7 @@ def load_run_history(db_path: Path | str | None = None, limit: int = 100) -> pd.
             order by run_date desc, rank asc, created_at desc""",
         )
     if rows.empty:
-        return pd.DataFrame(columns=["????", "????", "??????", "?????"])
+        return pd.DataFrame(columns=["运行日期", "运行时间", "选出股票名称", "选中股票数"])
 
     rows = rows.copy()
     rows["created_at"] = rows["created_at"].fillna("")
@@ -249,10 +249,10 @@ def load_run_history(db_path: Path | str | None = None, limit: int = 100) -> pd.
         ]
         records.append(
             {
-                "????": run_date,
-                "????": group["created_at"].max() or "-",
-                "??????": "?".join(stock_names),
-                "?????": len(stock_names),
+                "运行日期": run_date,
+                "运行时间": group["created_at"].max() or "-",
+                "选出股票名称": "、".join(stock_names),
+                "选中股票数": len(stock_names),
             }
         )
     return pd.DataFrame(records).head(limit)
@@ -716,9 +716,9 @@ def _render_header(db_path: Path, output_dir: Path) -> None:
         st.markdown(
             """
             <div class="product-header">
-                <div class="logo-mark">?</div>
-                <div class="product-title">?????????</div>
-                <div class="signature">Sherman??</div>
+                <div class="logo-mark">策</div>
+                <div class="product-title">明星分析师共识策略</div>
+                <div class="signature">Sherman制作</div>
             </div>
             """,
             unsafe_allow_html=True,
@@ -726,16 +726,16 @@ def _render_header(db_path: Path, output_dir: Path) -> None:
     with action_col:
         left, right = st.columns(2)
         with left:
-            if st.button("????", use_container_width=True):
+            if st.button("历史记录", use_container_width=True):
                 st.session_state["dashboard_view"] = "history"
                 st.rerun()
         with right:
-            if st.button("????", use_container_width=True, type="primary"):
-                with st.spinner("????????..."):
+            if st.button("人工刷新", use_container_width=True, type="primary"):
+                with st.spinner("正在重新计算周报..."):
                     result = run_weekly(db_path, output_dir=output_dir)
                 st.session_state["last_refresh_result"] = result
                 st.session_state["dashboard_view"] = "main"
-                st.success(f"??????? {result['candidate_count']}??? {result['portfolio_count']}")
+                st.success(f"刷新完成：候选 {result['candidate_count']}，组合 {result['portfolio_count']}")
                 st.rerun()
 
 
@@ -743,10 +743,10 @@ def _render_history_view(db_path: Path) -> None:
     import streamlit as st
 
     history = load_run_history(db_path, limit=100)
-    st.subheader("????")
-    st.caption("?? 100 ????????????????")
+    st.subheader("历史记录")
+    st.caption("最近 100 次运行结果，按运行日期倒序展示。")
     if history.empty:
-        st.info("????????????")
+        st.info("尚无历史运行记录。")
         return
     st.dataframe(history, use_container_width=True, hide_index=True)
 
@@ -855,7 +855,7 @@ def main() -> None:
     settings = load_settings()
     db_path = settings.db_path
     output_dir = settings.root / "outputs"
-    st.set_page_config(page_title="?????????", layout="wide")
+    st.set_page_config(page_title="明星分析师共识策略", layout="wide")
     _inject_style()
     _render_header(db_path, output_dir)
 
@@ -876,77 +876,77 @@ def main() -> None:
     process = load_process_summary(db_path)
 
     c1, c2, c3, c4, c5 = st.columns(5)
-    c1.metric("??????", metrics["latest_run_time"] or run_date or "-")
-    c2.metric("?????", metrics["distinct_analyst_count"])
-    c3.metric("?????", report_details["stock_code"].nunique() if "stock_code" in report_details.columns else 0)
-    c4.metric("?????", len(candidates))
-    c5.metric("?????", len(portfolio))
+    c1.metric("最新运行时间", metrics["latest_run_time"] or run_date or "-")
+    c2.metric("分析师人数", metrics["distinct_analyst_count"])
+    c3.metric("覆盖股票数", report_details["stock_code"].nunique() if "stock_code" in report_details.columns else 0)
+    c4.metric("股票候选池", len(candidates))
+    c5.metric("终选股票数", len(portfolio))
 
     tab_portfolio, tab_analysts, tab_reports, tab_candidates, tab_quality, tab_overview = st.tabs(
-        ["????", "?????", "??????", "??????", "????", "????"]
+        ["最终组合", "明星分析师", "研报股票明细", "候选池与得分", "数据质量", "流程总览"]
     )
 
     with tab_portfolio:
-        st.subheader("?????????")
-        st.caption("weight ? 8 ???????????? 12.5%?????????????")
+        st.subheader("最终选中股票名单")
+        st.caption("weight 按 8 只组合等权展示，单只为 12.5%；未使用仓位留待人工确认。")
         _render_table(portfolio)
 
     with tab_analysts:
         _analyst_management(db_path)
 
     with tab_reports:
-        st.subheader("?????????????")
-        st.caption("??????????????????????????????")
+        st.subheader("明星分析师研报中的股票详情")
+        st.caption("包含分析师、行业、股票、目标价、现价、空间、得分和剔除原因。")
         _render_table(report_details)
 
     with tab_candidates:
-        st.subheader("????????")
-        st.caption("????????fail_reason ??????????")
+        st.subheader("候选池与得分拆解")
+        st.caption("每一列都可排序；fail_reason 显示入选或剔除原因。")
         _render_table(candidates)
 
     with tab_quality:
-        st.subheader("???????????")
+        st.subheader("研报数量与关键字段覆盖")
         _render_table(report_quality, link_stock_code=False)
-        st.subheader("?????????")
-        st.caption("???????????????????????")
+        st.subheader("数据质量和接口状态")
+        st.caption("外部接口失败、字段映射和缺失数据会记录在这里。")
         _render_table(quality, link_stock_code=False)
 
     with tab_overview:
-        st.subheader("?????")
+        st.subheader("每一步产物")
         _render_table(process, link_stock_code=False)
-        st.subheader("???????")
+        st.subheader("筛选与打分逻辑")
         st.markdown(
             """
-            **????**
+            **数据准备**
 
-            - ??????? AKShare ? Tushare??????????????ST ???
-            - ??????????????????????20 ?/60 ???????????
-            - ??/????????????????????????
-            - ?????????? CSV ??????????????????? + ????
+            - 股票基础表来自 AKShare 或 Tushare，记录股票代码、名称、行业、ST 状态。
+            - 行情表记录日线收盘价、成交额，用于计算现价、20 日/60 日涨幅、均线和流动性。
+            - 研报/评级表记录券商、分析师、评级、目标价和发布日期。
+            - 明星分析师库来自手工 CSV 和慧博榜单，匹配时优先使用“分析师姓名 + 券商”。
 
-            **???**
+            **硬过滤**
 
-            - ???????????????????
-            - ???? 2 ????????
-            - ???? 2 ????????????
-            - ST?????????????????????????
+            - 目标价空间必须不低于配置中的最低空间。
+            - 至少需要 2 家券商形成共识。
+            - 至少需要 2 位匹配成功的明星分析师。
+            - ST、重大风险、流动性不足、研报后涨幅过大等会被剔除。
 
-            **???**
+            **软提示**
 
-            - ?????????????? MA60???????????????????????????? warning?
-            - warning ???????????????
+            - 研报后价格反应过弱、价格低于 MA60、中等风险事件、只匹配到分析师姓名但券商不一致，会写入 warning。
+            - warning 不一定剔除，但会帮助人工复核。
 
-            **??**
+            **打分**
 
-            - ???????????????????????????????????? `config/strategy.yaml` ?????
-            - ???????????????????????????
-            - `fail_reason` ??????????????????
+            - 目标价空间、明星共识、目标价上修、盈利预测上修、研报后价格反应、趋势分按 `config/strategy.yaml` 权重加权。
+            - 缺历史数据时使用中性分，避免第一版因为缺字段完全崩掉。
+            - `fail_reason` 会保留每只股票通过或剔除的直接原因。
 
-            **??**
+            **组合**
 
-            - ?????? `pass_filter=1` ????????????????
-            - ??? 8 ???????????? 12.5%?
-            - ???????????????? `research_fallback` ?????????????????
+            - 正式组合只从 `pass_filter=1` 的股票中选取，并受行业上限约束。
+            - 仓位按 8 只组合等权展示，每只固定 12.5%。即使当前只选出 2 只，也显示为 12.5%，剩余仓位留空等待人工确认。
+            - 如果没有严格通过股票，系统会给出 `research_fallback` 研究观察名单，但不会冒充正式通过。
             """
         )
 
